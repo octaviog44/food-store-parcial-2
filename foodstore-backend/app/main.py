@@ -7,6 +7,7 @@ from app.core.database import create_db_and_tables
 from app.core.seed import seed_unidades_medida
 from app.modules.unidades_medida.router import router as unidades_router
 from app.modules.productos.router import router as productos_router
+from app.modules.categorias.router import router as categorias_router
 
 import app.modules.unidades_medida.model  # noqa: F401
 import app.modules.categorias.model      # noqa: F401
@@ -37,6 +38,7 @@ app.add_middleware(
 
 app.include_router(unidades_router)
 app.include_router(productos_router)
+app.include_router(categorias_router)
 
 
 @app.get("/")
