@@ -1,0 +1,188 @@
+### =========================================================
+### Food Store - Pruebas de relaciones 1:N y N:N (R3)
+### Requiere: extensión "REST Client" de VS Code
+### Base URL: http://127.0.0.1:8000
+### =========================================================
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+
+### =========================================================
+### 1. Alta de categorías (201)
+### =========================================================
+# @name catPastas
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Pastas",
+  "descripcion": "Fideos y pastas secas"
+}
+
+###
+# @name catBebidas
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Bebidas",
+  "descripcion": "Aguas, gaseosas y jugos"
+}
+
+
+### =========================================================
+### 2. Nombre repetido entre categorías activas (409 - RN-02)
+### =========================================================
+POST {{baseUrl}}/categorias
+Content-Type: application/json
+
+{
+  "nombre": "Pastas",
+  "descripcion": "Intento duplicado"
+}
+
+
+### =========================================================
+### 3. Crear un producto para clasificar
+### =========================================================
+# @name prodFideos
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Fideos tallarines",
+  "descripcion": "Paquete de 500g",
+  "precio_base": 1200.50,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 5,
+  "disponible": true
+}
+
+
+### =========================================================
+### 4. Clasificar el producto en dos categorías con cambio de principal
+###    (RN-09: la anterior deja de ser principal)
+### =========================================================
+
+### 4.1 Clasificar en Pastas como principal (201)
+POST {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{catPastas.response.body.$.id}},
+  "es_principal": true
+}
+
+### 4.2 Ver categorías del producto: Pastas con es_principal=true
+GET {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}/categorias
+
+### 4.3 Clasificar en Bebidas como principal (201)
+POST {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{catBebidas.response.body.$.id}},
+  "es_principal": true
+}
+
+### 4.4 Ver categorías: Pastas es_principal=false, Bebidas es_principal=true
+GET {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}/categorias
+
+
+### =========================================================
+### 5. Intento de clasificar dos veces en la misma categoría (409 - RN-07)
+### =========================================================
+POST {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{catPastas.response.body.$.id}},
+  "es_principal": false
+}
+
+
+### =========================================================
+### 6. Filtro categoria_id del listado de productos (RN de R3)
+### =========================================================
+
+### 6.1 Productos de Pastas: debe aparecer Fideos tallarines
+GET {{baseUrl}}/productos?categoria_id={{catPastas.response.body.$.id}}
+
+### 6.2 Productos de Bebidas: también debe aparecer Fideos tallarines
+GET {{baseUrl}}/productos?categoria_id={{catBebidas.response.body.$.id}}
+
+
+### =========================================================
+### 7. Anular una categoría NO anula sus productos (RN-06)
+### =========================================================
+
+### 7.1 Anular Pastas (204)
+DELETE {{baseUrl}}/categorias/{{catPastas.response.body.$.id}}
+
+### 7.2 El producto sigue activo (200, activo=true)
+GET {{baseUrl}}/productos/{{prodFideos.response.body.$.id}}
+
+### 7.3 El listado de productos activos sigue incluyendo el producto
+GET {{baseUrl}}/productos
+
+
+### =========================================================
+### 8. No se puede clasificar en una categoría anulada (409 - RN-08)
+### =========================================================
+
+### 8.1 Crear otro producto para la prueba
+# @name prodArroz
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Arroz largo fino",
+  "descripcion": "Paquete de 1kg",
+  "precio_base": 800.00,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 10,
+  "disponible": true
+}
+
+### 8.2 Intentar clasificarlo en la categoría Pastas (anulada): 409
+POST {{baseUrl}}/productos/{{prodArroz.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{catPastas.response.body.$.id}},
+  "es_principal": false
+}
+
+
+### =========================================================
+### 9. Errores 404 de la relación N:N
+### =========================================================
+
+### 9.1 Clasificar en categoría inexistente (404)
+POST {{baseUrl}}/productos/{{prodArroz.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": 999999,
+  "es_principal": false
+}
+
+### 9.2 Listar categorías de producto inexistente (404)
+GET {{baseUrl}}/productos/999999/categorias
+
+
+### =========================================================
+### 10. No se puede clasificar un producto anulado (409 - RN-08)
+### =========================================================
+
+### 10.1 Anular el producto Arroz (204)
+DELETE {{baseUrl}}/productos/{{prodArroz.response.body.$.id}}
+
+### 10.2 Intentar clasificarlo en Bebidas: 409
+POST {{baseUrl}}/productos/{{prodArroz.response.body.$.id}}/categorias
+Content-Type: application/json
+
+{
+  "categoria_id": {{catBebidas.response.body.$.id}},
+  "es_principal": false
+}
