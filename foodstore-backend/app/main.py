@@ -1,10 +1,25 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.database import create_db_and_tables
+from app.core.seed import seed_unidades_medida
+import app.modules.unidades_medida.model  # noqa: F401
+import app.modules.categorias.model      # noqa: F401
+import app.modules.productos.model       # noqa: F401
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    seed_unidades_medida()
+    yield
+
 
 app = FastAPI(
     title="Food Store API",
     description="API REST para administrar el catálogo de productos de Food Store.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -14,6 +29,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def inicio():
