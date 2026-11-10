@@ -40,3 +40,14 @@ class ProductoPublic(SQLModel):
     unidad_venta: UnidadMedidaPublic
     categorias: list[CategoriaPublic]
     hay_stock: bool
+
+
+class ProductoCategoriaCreate(SQLModel):
+    categoria_id: int
+    es_principal: bool = False
+
+
+class ProductoCategoriaPublic(SQLModel):
+    categoria_id: int
+    nombre: str
+    es_principal: bool

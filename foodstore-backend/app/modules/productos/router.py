@@ -4,6 +4,8 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.modules.productos.schema import (
     ProductoCreate,
+    ProductoCategoriaCreate,
+    ProductoCategoriaPublic,
     ProductoPublic,
     ProductoUpdate,
 )
@@ -65,3 +67,29 @@ def anular_producto(
 ):
     service.anular_producto(session, producto_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- Relación N:N ----------
+
+@router.post(
+    "/{producto_id}/categorias",
+    response_model=ProductoCategoriaPublic,
+    status_code=status.HTTP_201_CREATED,
+)
+def clasificar_producto(
+    data: ProductoCategoriaCreate,
+    producto_id: int = Path(..., ge=1),
+    session: Session = Depends(get_session),
+):
+    return service.clasificar_producto(session, producto_id, data)
+
+
+@router.get(
+    "/{producto_id}/categorias",
+    response_model=list[ProductoCategoriaPublic],
+)
+def listar_categorias_de_producto(
+    producto_id: int = Path(..., ge=1),
+    session: Session = Depends(get_session),
+):
+    return service.listar_categorias_de_producto(session, producto_id)

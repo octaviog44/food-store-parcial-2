@@ -1,18 +1,23 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
+from app.modules.categorias.model import Categoria
+from app.modules.productos.link_model import ProductoCategoria
 from app.modules.productos.model import Producto
 from app.modules.productos.schema import (
     ProductoCreate,
+    ProductoCategoriaCreate,
+    ProductoCategoriaPublic,
     ProductoPublic,
     ProductoUpdate,
 )
 from app.modules.unidades_medida.model import TipoUnidad, UnidadMedida
 
 
-
+# ---------- Helpers de validación ----------
 
 def _validar_unidad_existe(session: Session, unidad_id: int) -> UnidadMedida:
     """RN-03: la unidad de venta referenciada debe existir."""
@@ -49,7 +54,7 @@ def _validar_stock_entero_si_contable(
         )
 
 
-
+# ---------- Conversión a schema público ----------
 
 def _producto_a_public(producto: Producto) -> ProductoPublic:
     """Arma el schema de respuesta e inyecta hay_stock (RN-11)."""
@@ -68,7 +73,7 @@ def _producto_a_public(producto: Producto) -> ProductoPublic:
     )
 
 
-
+# ---------- Operaciones CRUD ----------
 
 def listar_productos(
     session: Session,
@@ -81,7 +86,6 @@ def listar_productos(
 ) -> list[ProductoPublic]:
     query = select(Producto)
 
-    
     if activo is None or activo is True:
         query = query.where(Producto.activo == True)  # noqa: E712
     else:
@@ -91,15 +95,13 @@ def listar_productos(
         query = query.where(Producto.disponible == disponible)
 
     if categoria_id is not None:
-        from app.modules.productos.link_model import ProductoCategoria
-
         query = query.join(
             ProductoCategoria,
-            ProductoCategoria.producto_id == Producto.id,  
+            ProductoCategoria.producto_id == Producto.id,
         ).where(ProductoCategoria.categoria_id == categoria_id)
 
     if search:
-        query = query.where(Producto.nombre.ilike(f"%{search}%"))  
+        query = query.where(Producto.nombre.ilike(f"%{search}%"))
 
     query = query.offset(skip).limit(limit)
     productos = session.exec(query).all()
@@ -154,13 +156,95 @@ def anular_producto(session: Session, producto_id: int) -> None:
     if producto is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     if not producto.activo:
-        raise HTTPException(
-            status_code=409, detail="El producto ya está anulado"
-        )
-
-    from datetime import datetime, timezone
+        raise HTTPException(status_code=409, detail="El producto ya está anulado")
 
     producto.activo = False
     producto.anulado_at = datetime.now(timezone.utc)
     session.add(producto)
     session.commit()
+
+
+# ---------- Relación N:N Producto-Categoría ----------
+
+def _obtener_producto_o_404(session: Session, producto_id: int) -> Producto:
+    producto = session.get(Producto, producto_id)
+    if producto is None:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+    return producto
+
+
+def clasificar_producto(
+    session: Session, producto_id: int, data: ProductoCategoriaCreate
+) -> ProductoCategoriaPublic:
+    """POST /productos/{id}/categorias — RN-07, RN-08, RN-09."""
+    producto = _obtener_producto_o_404(session, producto_id)
+
+    if not producto.activo:
+        raise HTTPException(
+            status_code=409, detail="No se puede clasificar un producto anulado"
+        )
+
+    categoria = session.get(Categoria, data.categoria_id)
+    if categoria is None:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+
+    if not categoria.activo:
+        raise HTTPException(
+            status_code=409, detail="No se puede clasificar en una categoría anulada"
+        )
+
+    vinculo_existente = session.get(
+        ProductoCategoria, (producto_id, data.categoria_id)
+    )
+    if vinculo_existente is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="El producto ya está clasificado en esa categoría",
+        )
+
+    if data.es_principal:
+        principales_actuales = session.exec(
+            select(ProductoCategoria).where(
+                ProductoCategoria.producto_id == producto_id,
+                ProductoCategoria.es_principal == True,  # noqa: E712
+            )
+        ).all()
+        for vinculo in principales_actuales:
+            vinculo.es_principal = False
+            session.add(vinculo)
+
+    nuevo = ProductoCategoria(
+        producto_id=producto_id,
+        categoria_id=data.categoria_id,
+        es_principal=data.es_principal,
+    )
+    session.add(nuevo)
+    session.commit()
+
+    return ProductoCategoriaPublic(
+        categoria_id=categoria.id,
+        nombre=categoria.nombre,
+        es_principal=nuevo.es_principal,
+    )
+
+
+def listar_categorias_de_producto(
+    session: Session, producto_id: int
+) -> list[ProductoCategoriaPublic]:
+    """GET /productos/{id}/categorias."""
+    _obtener_producto_o_404(session, producto_id)
+
+    vinculos = session.exec(
+        select(ProductoCategoria, Categoria)
+        .join(Categoria, Categoria.id == ProductoCategoria.categoria_id)  # type: ignore[arg-type]
+        .where(ProductoCategoria.producto_id == producto_id)
+    ).all()
+
+    return [
+        ProductoCategoriaPublic(
+            categoria_id=categoria.id,
+            nombre=categoria.nombre,
+            es_principal=vinculo.es_principal,
+        )
+        for vinculo, categoria in vinculos
+    ]
