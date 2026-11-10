@@ -1,11 +1,15 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.core.database import create_db_and_tables
 from app.core.seed import seed_unidades_medida
-import app.modules.unidades_medida.model  # noqa: F401
-import app.modules.categorias.model      # noqa: F401
-import app.modules.productos.model       # noqa: F401
+from app.modules.unidades_medida.router import router as unidades_router
+
+import app.modules.unidades_medida.model  
+import app.modules.categorias.model      
+import app.modules.productos.model       
 
 
 @asynccontextmanager
@@ -29,6 +33,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(unidades_router)
 
 
 @app.get("/")
