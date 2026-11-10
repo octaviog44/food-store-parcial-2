@@ -1,0 +1,232 @@
+### =========================================================
+### Food Store - Pruebas del módulo Productos (R2)
+### Requiere: extensión "REST Client" de VS Code
+### Base URL: http://127.0.0.1:8000
+### =========================================================
+
+@baseUrl = http://127.0.0.1:8000/api/v1
+
+### ---------------------------------------------------------
+### 0. Catálogo de unidades (para conocer los ids del seed)
+###    ids esperados: 1=kg, 2=g, 3=L, 4=mL, 5=u (contable), 6=doc (contable)
+### ---------------------------------------------------------
+GET {{baseUrl}}/unidades-medida
+
+
+### =========================================================
+### 1. POST - Crear producto (201)
+### =========================================================
+# @name crearProductoPeso
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Harina 000",
+  "descripcion": "Bolsa de 1 kg",
+  "precio_base": 950.00,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 5.5,
+  "disponible": true
+}
+
+### =========================================================
+### 2. GET - Listado por defecto (200)
+### =========================================================
+GET {{baseUrl}}/productos
+
+
+### =========================================================
+### 3. GET - Detalle del producto creado (200)
+### =========================================================
+GET {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+
+### =========================================================
+### 4. PUT - Actualizar producto (200)
+###    Cambia nombre, precio, stock y disponible
+### =========================================================
+PUT {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Harina 000 refinada",
+  "descripcion": "Bolsa de 1 kg",
+  "precio_base": 1050.00,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 3.25,
+  "disponible": false
+}
+
+
+### =========================================================
+### 5. Filtros del listado
+### =========================================================
+
+### 5.1 Filtro search (coincidencia parcial, sin distinguir mayúsculas)
+GET {{baseUrl}}/productos?search=harina
+
+### 5.2 Filtro disponible=false (producto pausado)
+GET {{baseUrl}}/productos?disponible=false
+
+### 5.3 Filtro activo=false (solo anulados; al inicio debería estar vacío)
+GET {{baseUrl}}/productos?activo=false
+
+### 5.4 Paginación (skip=0, limit=2)
+GET {{baseUrl}}/productos?skip=0&limit=2
+
+
+### =========================================================
+### 6. hay_stock: lectura antes y después de llevar stock a 0
+### =========================================================
+
+### 6.1 Antes: hay_stock debe ser true (stock > 0)
+GET {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+### 6.2 Llevar stock a 0 con PUT
+PUT {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Harina 000 refinada",
+  "descripcion": "Bolsa de 1 kg",
+  "precio_base": 1050.00,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 0,
+  "disponible": false
+}
+
+### 6.3 Después: hay_stock debe ser false
+GET {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+
+### =========================================================
+### 7. Escenarios de error
+### =========================================================
+
+### 7.1 404 - GET detalle de id inexistente
+GET {{baseUrl}}/productos/999999
+
+### 7.2 404 - PUT sobre id inexistente
+PUT {{baseUrl}}/productos/999999
+Content-Type: application/json
+
+{
+  "nombre": "No existe",
+  "descripcion": null,
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 7.3 404 - POST con unidad_venta_id inexistente
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto con unidad fantasma",
+  "descripcion": null,
+  "precio_base": 100,
+  "unidad_venta_id": 999999,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 7.4 409 - Nombre repetido entre activos
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Harina 000 refinada",
+  "descripcion": "Intento duplicado",
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 7.5 422 - Nombre demasiado corto (RN-01)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "ab",
+  "descripcion": null,
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 7.6 422 - precio_base negativo (RN-01)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto precio negativo",
+  "descripcion": null,
+  "precio_base": -10,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 7.7 422 - stock_cantidad negativo (RN-01)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Producto stock negativo",
+  "descripcion": null,
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": -1,
+  "disponible": true
+}
+
+### 7.8 422 - stock decimal sobre unidad contable (RN-10)
+POST {{baseUrl}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Docena con decimales",
+  "descripcion": "unidad 6 = docena (contable)",
+  "precio_base": 100,
+  "unidad_venta_id": 6,
+  "stock_cantidad": 1.5,
+  "disponible": true
+}
+
+### 7.9 422 - limit fuera de rango (le=50)
+GET {{baseUrl}}/productos?limit=51
+
+
+### =========================================================
+### 8. DELETE - Anular producto (204)
+### =========================================================
+DELETE {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+### 8.1 GET del anulado por id (sigue existiendo, activo=false)
+GET {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+### 8.2 409 - DELETE repetido (ya anulado, RN-04)
+DELETE {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+
+### 8.3 409 - PUT sobre producto anulado (RN-05)
+PUT {{baseUrl}}/productos/{{crearProductoPeso.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "nombre": "Intento modificar anulado",
+  "descripcion": null,
+  "precio_base": 100,
+  "unidad_venta_id": 1,
+  "stock_cantidad": 1,
+  "disponible": true
+}
+
+### 8.4 Listado por defecto: el anulado no aparece
+GET {{baseUrl}}/productos
+
+### 8.5 Listado con activo=false: el anulado aparece
+GET {{baseUrl}}/productos?activo=false
